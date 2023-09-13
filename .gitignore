@@ -2,4 +2,5 @@
 /test.txt
 /test1.txt
 /test2.txt
+/kubernetes/.kube/config/admin.confF:Terraformkubernetes.kubeconfigadmin.conf
 /kubernetes/.kube/config/admin.conf
