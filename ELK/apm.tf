@@ -101,6 +101,10 @@ spec:
      app: apm-server
    spec:
       nodeName: k8s.worker2
+      initContainers:
+       - name: wait-for-elasticsearch
+         image: appropriate/curl:latest
+         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
       - name: apm-server
         image: docker.elastic.co/apm/apm-server:8.9.1
@@ -129,18 +133,7 @@ spec:
         - name: config
           mountPath: /usr/share/apm-server/apm-server.yml
           readOnly: true
-          subPath: apm-server.yml
-        readinessProbe:
-            initialDelaySeconds: 60
-            periodSeconds: 15
-            timeoutSeconds: 3
-            successThreshold: 1
-            failureThreshold: 25
-            exec:
-              command:
-                - bash
-                - -c
-                - curl http://elkservice:9200 | grep -q 'missing authentication credentials'
+          subPath: apm-server.yml        
       volumes:
       - name: config
         configMap:
