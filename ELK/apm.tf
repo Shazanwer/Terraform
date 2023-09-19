@@ -130,6 +130,17 @@ spec:
           mountPath: /usr/share/apm-server/apm-server.yml
           readOnly: true
           subPath: apm-server.yml
+        readinessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 25
+            exec:
+              command:
+                - bash
+                - -c
+                - curl http://elkservice:9200 | grep -q 'missing authentication credentials'
       volumes:
       - name: config
         configMap:
