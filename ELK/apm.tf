@@ -49,7 +49,7 @@ data:
         codec: best_compression
 
     output.elasticsearch:
-      hosts: $${ELKSERVICE_SERVICE_HOST}:9200
+      hosts: $${ELKSVCELASTICSEARCH_SERVICE_HOST}:9200
       username: elastic
       password: 01systems
 
@@ -104,13 +104,13 @@ spec:
       initContainers:
        - name: wait-for-elasticsearch
          image: appropriate/curl:latest
-         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
+         command: ['sh', '-c', 'until curl -s http://elksvcelasticsearch:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
       - name: apm-server
         image: docker.elastic.co/apm/apm-server:8.9.1
         env:
         - name: ELASTICSEARCH_HOST
-          value: $${ELKSERVICE_SERVICE_HOST}
+          value: $${ELKSVCELASTICSEARCH_SERVICE_HOST}
         - name: ELASTICSEARCH_PORT
           value: "9200"
         - name: ELASTICSEARCH_USERNAME

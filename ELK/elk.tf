@@ -13,34 +13,70 @@ metadata:
 YAML
 }
 
-resource "kubectl_manifest" "service" {
+resource "kubectl_manifest" "service_logstash" {
   yaml_body = <<YAML
 apiVersion: v1
 kind: Service
 metadata:
-  name: elkservice
+  name: elksvclogstash
   namespace: elk
   labels:
     name: elk
 spec:
   type: NodePort
   selector:
-    name: elk
-  ports:
-    - port: 9200
-      nodePort: 30011
-      name: elasticsearch
-    - port: 8080
-      nodePort: 30012
-      name: http
-    - port: 5601
-      nodePort: 30013
-      name: kibana
+    name: elk-logstash
+  ports:    
     - port: 5044
       nodePort: 30014
       name: logstash
       targetPort: 5044
       protocol: TCP
+
+YAML
+}
+
+resource "kubectl_manifest" "service_elasticsearch" {
+  yaml_body = <<YAML
+apiVersion: v1
+kind: Service
+metadata:
+  name: elksvcelasticsearch
+  namespace: elk
+  labels:
+    name: elk
+spec:
+  type: NodePort
+  selector:
+    name: elk-elasticsearch
+  ports:
+    - port: 9200
+      nodePort: 30011
+      name: elasticsearch      
+
+YAML
+}
+
+resource "kubectl_manifest" "service_kibana" {
+  yaml_body = <<YAML
+apiVersion: v1
+kind: Service
+metadata:
+  name: elksvckibana
+  namespace: elk
+  labels:
+    name: elk
+spec:
+  type: NodePort
+  selector:
+    name: elk-kibana
+  ports:
+    - port: 5601
+      nodePort: 30013
+      name: kibana
+    - port: 8080
+      nodePort: 30012
+      name: http
 
 YAML
 }
@@ -61,6 +97,7 @@ data:
     http.host: 0.0.0.0
     #network.host: 127.0.0.1   
     #discovery.seed_hosts: ["127.0.0.1"]
+    xpack.ml.enabled: false
     xpack.license.self_generated.type: basic
     xpack.security.enabled: true    
     xpack.security.http.ssl.enabled: false
@@ -82,22 +119,22 @@ data:
   kibana.yml: |-
     server.name: kibana
     server.host: 0.0.0.0    
-    elasticsearch.hosts: ["http://$${ELKSERVICE_SERVICE_HOST}:9200"]
+    elasticsearch.hosts: ["http://elksvcelasticsearch:9200"]
     elasticsearch.username: kibana_system
     elasticsearch.password: 01systems
     elasticsearch.requestTimeout: 40000
     xpack.actions.allowedHosts: ["*"]
     xpack.actions.enabledActionTypes: ["*"]
     xpack.monitoring.ui.container.elasticsearch.enabled: false
-    xpack.reporting.roles.enabled: false    
+    xpack.reporting.roles.enabled: false      
     xpack.security.enabled: true     
     xpack.encryptedSavedObjects.encryptionKey: d4537d34978e9f99f76be5458628b2a6
     xpack.reporting.encryptionKey: a6d49011ac7693698c79c98fa9c52c1f
     xpack.security.encryptionKey: 6510ead44d8338e1b6a10c6c748a0021    
     xpack.fleet.enabled: true
     xpack.fleet.agents.enabled: true
-    #xpack.fleet.agents.elasticsearch.hosts: ["http://$${ELKSERVICE_SERVICE_HOST}:9200"]
-    #xpack.fleet.agents.fleet_server.hosts: ["http://$${ELKSERVICE_SERVICE_HOST}:9200"]    
+    #xpack.fleet.agents.elasticsearch.hosts: ["http://elksvcelasticsearch:9200"]
+    #xpack.fleet.agents.fleet_server.hosts: ["http://elksvcelasticsearch:9200"]    
     #xpack.fleet.registryUrl: "http://package-registry.corp.net:8080"
     #xpack.fleet.packages:
     #- name: kubernetes
@@ -136,7 +173,7 @@ metadata:
 data:
   logstash.yml: |-
     http.host: "0.0.0.0"
-    xpack.monitoring.elasticsearch.hosts: "http://$${ELKSERVICE_SERVICE_HOST}:9200"
+    xpack.monitoring.elasticsearch.hosts: "http://elksvcelasticsearch:9200"
     xpack.monitoring.enabled: true        
     xpack.monitoring.elasticsearch.username: elastic
     xpack.monitoring.elasticsearch.password: 01systems
@@ -151,7 +188,7 @@ data:
     output {  
       stdout { codec => rubydebug }    
       elasticsearch {
-        hosts => ["http://$${ELKSERVICE_SERVICE_HOST}:9200"]
+        hosts => ["http://elksvcelasticsearch:9200"]
         user => "elastic"
         password => "01systems"
         index => "%%{[@metadata][beat]}-%%{[@metadata][version]}" 
@@ -183,7 +220,7 @@ data:
                 logs_path: "/var/log/containers/"  
 
     output.logstash:
-      hosts: ["$${ELKSERVICE_SERVICE_HOST}:5044"]
+      hosts: ["$${ELKSVCLOGSTASH_SERVICE_HOST}:5044"]
       enabled: true
       username: kibana_system
       password: 01systems
@@ -211,7 +248,7 @@ YAML
 resource "kubectl_manifest" "elasticsearch" {
   yaml_body = <<YAML
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 
 metadata:
   name: elasticsearch
@@ -223,11 +260,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      name: elk
+      name: elk-elasticsearch
   template:
     metadata:
       labels:
-        name: elk
+        name: elk-elasticsearch
     spec:
       restartPolicy: Always
       nodeName: k8s-apm
@@ -280,7 +317,7 @@ spec:
               command:
                 - bash
                 - -c
-                #- curl http://elkservice:9200 | grep -q 'missing authentication credentials'
+                #- curl http://elksvcelasticsearch:9200 | grep -q 'missing authentication credentials'
                 #- curl -u \"elastic:$${ELASTIC_PASSWORD}\" http://localhost:9200 | grep -q '^{'
                 - 'curl -s -X POST -H "Content-Type: application/json" -u "elastic:$${ELASTIC_PASSWORD}" http://localhost:9200/_security/user/kibana_system/_password -d "{\"password\":\"$${KIBANA_PASSWORD}\"}" -v | grep -q "^{}"'
       volumes:
@@ -307,22 +344,24 @@ kind: Deployment
 metadata:
   name: kibana
   namespace: elk
+  labels:
+    name: elk
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: elk
+      name: elk-kibana
   template:
     metadata:
       labels:
-        name: elk
+        name: elk-kibana
     spec:
       restartPolicy: Always
       nodeName: k8s-apm
       initContainers:
        - name: wait-for-elasticsearch
          image: appropriate/curl:latest
-         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
+         command: ['sh', '-c', 'until curl -s http://elksvcelasticsearch:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
         - name: kibanacont
           resources:
@@ -349,7 +388,7 @@ spec:
             - name: SERVERNAME
               value: kibana
             - name: ELASTICSEARCH_HOSTS
-              value: http://elkservice:9200
+              value: http://elksvcelasticsearch:9200
           ports:
             - containerPort: 5601
           readinessProbe:
@@ -362,7 +401,7 @@ spec:
               command:
                 - bash
                 - -c
-                - curl http://elkservice:9200 | grep -q 'missing authentication credentials'
+                - curl http://elksvcelasticsearch:9200 | grep -q 'missing authentication credentials'
                 #- 'curl -s -X POST -H "Content-Type: application/json" -u "elastic:$${ELASTIC_PASSWORD}" http://$${MY_POD_IP}:9200/_security/user/kibana_system/_password -d "{\"password\":\"$${KIBANA_PASSWORD}\"}" -v | grep -q "^{}"'
       volumes:
       - name: kibconfig
@@ -385,22 +424,24 @@ kind: Deployment
 metadata:
   name: logstash
   namespace: elk
+  labels:
+    name: elk
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: elk
+      name: elk-logstash
   template:
     metadata:
       labels:
-        name: elk
+        name: elk-logstash
     spec:
       restartPolicy: Always
       nodeName: k8s-apm
       initContainers:
        - name: wait-for-elasticsearch
          image: appropriate/curl:latest
-         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
+         command: ['sh', '-c', 'until curl -s http://elksvcelasticsearch:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
         - name: logstashcont
           resources:
@@ -413,7 +454,7 @@ spec:
           image: "docker.elastic.co/logstash/logstash:8.9.1"
           #env:
           #  - name: ELASTICSEARCH_HOSTS
-          #    value: http://elkservice:9200
+          #    value: http://elksvcelasticsearch:9200
           volumeMounts:
             - name: lspipeline
               mountPath: "/usr/share/logstash/pipeline/logstash.conf"
@@ -435,7 +476,7 @@ spec:
               command:
                 - bash
                 - -c
-                - curl http://elkservice:9200 | grep -q 'missing authentication credentials'
+                - curl http://elksvcelasticsearch:9200 | grep -q 'missing authentication credentials'
       volumes:
         - name: lsconfig
           configMap:
@@ -463,22 +504,24 @@ kind: Deployment
 metadata:
   name: filebeat
   namespace: elk
+  labels:
+    name: elk
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: elk
+      name: elk-filebeat
   template:
     metadata:
       labels:
-        name: elk
+        name: elk-filebeat
     spec:
       restartPolicy: Always
       nodeName: k8s.worker1
       initContainers:
        - name: wait-for-elasticsearch
          image: appropriate/curl:latest
-         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
+         command: ['sh', '-c', 'until curl -s http://elksvcelasticsearch:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
         - name: filebeatcont
           resources:
@@ -523,7 +566,7 @@ spec:
               command:
                 - bash
                 - -c
-                - curl http://elkservice:9200 | grep -q 'missing authentication credentials'
+                - curl http://elksvcelasticsearch:9200 | grep -q 'missing authentication credentials'
       volumes:
         - name: fbconfig
           configMap:
