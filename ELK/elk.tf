@@ -56,8 +56,11 @@ metadata:
     name: elk
 data:
   elasticsearch.yml: |-
-    cluster.name: k8s-elk-cluster       
-    network.host: 0.0.0.0   
+    cluster.name: k8s-elk-cluster  
+    network.host: 0.0.0.0 
+    http.host: 0.0.0.0
+    #network.host: 127.0.0.1   
+    #discovery.seed_hosts: ["127.0.0.1"]
     xpack.license.self_generated.type: basic
     xpack.security.enabled: true    
     xpack.security.http.ssl.enabled: false
@@ -189,7 +192,7 @@ data:
 YAML
 }
 
-resource "kubectl_manifest" "secret" {
+resource "kubectl_manifest" "elk_secret" {
   yaml_body = <<YAML
 apiVersion: v1
 kind: Secret
@@ -230,7 +233,7 @@ spec:
       nodeName: k8s-apm
       containers:
         - name: elasticsearchcont
-          image: "docker.elastic.co/elasticsearch/elasticsearch:8.9.1"
+          image: "docker.elastic.co/elasticsearch/elasticsearch:8.9.1"          
           resources:
             limits:
               memory: 2000Mi    
@@ -259,7 +262,7 @@ spec:
                   fieldPath: status.podIP
           ports:
             - containerPort: 9200
-              name: elasticsearch
+              name: elasticsearch          
           volumeMounts:
             - name: datastorage
               mountPath: "/usr/share/elasticsearch/data"
@@ -268,7 +271,7 @@ spec:
               readOnly: true
               subPath: elasticsearch.yml
           readinessProbe:
-            initialDelaySeconds: 25
+            initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 3
             successThreshold: 1
@@ -277,8 +280,9 @@ spec:
               command:
                 - bash
                 - -c
+                #- curl http://elkservice:9200 | grep -q 'missing authentication credentials'
                 #- curl -u \"elastic:$${ELASTIC_PASSWORD}\" http://localhost:9200 | grep -q '^{'
-                - 'curl -s -X POST -H "Content-Type: application/json" -u "elastic:$${ELASTIC_PASSWORD}" http://$${MY_POD_IP}:9200/_security/user/kibana_system/_password -d "{\"password\":\"$${KIBANA_PASSWORD}\"}" -v | grep -q "^{}"'
+                - 'curl -s -X POST -H "Content-Type: application/json" -u "elastic:$${ELASTIC_PASSWORD}" http://localhost:9200/_security/user/kibana_system/_password -d "{\"password\":\"$${KIBANA_PASSWORD}\"}" -v | grep -q "^{}"'
       volumes:
         - name: esconfig
           configMap:
@@ -288,6 +292,11 @@ spec:
             #medium: "3000Mi"
 
 YAML
+  depends_on = [
+    kubectl_manifest.elk_secret,
+    kubectl_manifest.configmap_elasticsearchconfig
+  ]
+
 }
 
 resource "kubectl_manifest" "kibana" {
@@ -310,6 +319,10 @@ spec:
     spec:
       restartPolicy: Always
       nodeName: k8s-apm
+      initContainers:
+       - name: wait-for-elasticsearch
+         image: appropriate/curl:latest
+         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
         - name: kibanacont
           resources:
@@ -358,9 +371,10 @@ spec:
             items:
               - key: kibana.yml
                 path: kibana.yml
-      
-
 YAML
+  depends_on = [
+    kubectl_manifest.configmap_kibanaconfig
+  ]
 }
 
 resource "kubectl_manifest" "logstash" {
@@ -383,6 +397,10 @@ spec:
     spec:
       restartPolicy: Always
       nodeName: k8s-apm
+      initContainers:
+       - name: wait-for-elasticsearch
+         image: appropriate/curl:latest
+         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
         - name: logstashcont
           resources:
@@ -431,8 +449,10 @@ spec:
             items:
               - key: logstash.conf
                 path: logstash.conf
-
 YAML
+  depends_on = [
+    kubectl_manifest.configmap_logstashconfig
+  ]
 }
 
 resource "kubectl_manifest" "filebeat" {
@@ -455,6 +475,10 @@ spec:
     spec:
       restartPolicy: Always
       nodeName: k8s.worker1
+      initContainers:
+       - name: wait-for-elasticsearch
+         image: appropriate/curl:latest
+         command: ['sh', '-c', 'until curl -s http://elkservice:9200; do echo waiting for elasticsearch pod; sleep 2; done;']
       containers:
         - name: filebeatcont
           resources:
@@ -518,4 +542,8 @@ spec:
 # k create clusterrolebinding filebeat-crb --clusterrole=filebeat-cr --serviceaccount=elk:default -n elk
 
 YAML
+
+  depends_on = [
+    kubectl_manifest.configmap_filebeatconfig
+  ]
 }
