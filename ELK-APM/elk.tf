@@ -267,7 +267,7 @@ spec:
         name: elk-elasticsearch
     spec:
       restartPolicy: Always
-      nodeName: k8s-apm
+      nodeName: k8s.worker1
       containers:
         - name: elasticsearchcont
           image: "docker.elastic.co/elasticsearch/elasticsearch:8.9.1"          

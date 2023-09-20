@@ -43,6 +43,15 @@ data:
       frontend:
         enabled: false
 
+    logging:
+      logging.level: info
+      logging.to_files: true
+      logging.files:
+        path: /var/log/apm-server
+        name: apm-server
+        keepfiles: 7
+        permissions: 0644
+
     setup.template.settings:
       index:
         number_of_shards: 1
