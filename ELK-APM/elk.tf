@@ -191,7 +191,11 @@ data:
         hosts => ["http://elksvcelasticsearch:9200"]
         user => "elastic"
         password => "01systems"
-        index => "%%{[@metadata][beat]}-%%{[@metadata][version]}" 
+        index => "%%{[@metadata][beat]}-%%{[@metadata][version]}"
+        alias => "%%{[@metadata][beat]}-%%{[@metadata][version]}_alias"
+        ilm_enabled => true
+        ilm_rollover_alias => "%%{[@metadata][beat]}-%%{[@metadata][version]}_alias"        
+        ilm_policy => "7-days"
       }
     }
 YAML
@@ -499,7 +503,7 @@ YAML
 resource "kubectl_manifest" "filebeat" {
   yaml_body = <<YAML
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 
 metadata:
   name: filebeat
@@ -517,7 +521,15 @@ spec:
         name: elk-filebeat
     spec:
       restartPolicy: Always
-      nodeName: k8s.worker1
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: k8s
+                  operator: In
+                  values:
+                    - worker
       initContainers:
        - name: wait-for-elasticsearch
          image: appropriate/curl:latest

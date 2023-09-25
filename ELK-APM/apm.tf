@@ -32,9 +32,7 @@ data:
         transaction_max_spans: 1000
         capture_body: errors  
         capture_headers: true  
-        capture_cookies: true 
-        secret_token: "01systems"
-      
+        capture_cookies: true      
 
       rum:
         enabled: true
