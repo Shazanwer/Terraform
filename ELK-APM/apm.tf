@@ -28,6 +28,13 @@ data:
   apm-server.yml: |-
     apm-server:
       host: "0.0.0.0:8200"
+      default_agent_config:
+        transaction_max_spans: 1000
+        capture_body: errors  
+        capture_headers: true  
+        capture_cookies: true 
+        secret_token: "01systems"
+      
 
       rum:
         enabled: true
