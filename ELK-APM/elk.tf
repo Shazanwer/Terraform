@@ -34,6 +34,9 @@ spec:
       protocol: TCP
 
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "service_elasticsearch" {
@@ -55,6 +58,9 @@ spec:
       name: elasticsearch      
 
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "service_kibana" {
@@ -79,6 +85,9 @@ spec:
       name: http
 
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "configmap_elasticsearchconfig" {
@@ -104,6 +113,9 @@ data:
     logger.org.elasticsearch.discovery: DEBUG
     ingest.geoip.downloader.enabled: false
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "configmap_kibanaconfig" {
@@ -159,6 +171,9 @@ data:
     server.publicBaseUrl: "http://10.100.2.12:30013"
     
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "configmap_logstashconfig" {
@@ -191,14 +206,16 @@ data:
         hosts => ["http://elksvcelasticsearch:9200"]
         user => "elastic"
         password => "01systems"
-        index => "%%{[@metadata][beat]}-%%{[@metadata][version]}"
-        alias => "%%{[@metadata][beat]}-%%{[@metadata][version]}_alias"
+        index => "%%{[@metadata][beat]}-%%{[@metadata][version]}"        
         ilm_enabled => true
-        ilm_rollover_alias => "%%{[@metadata][beat]}-%%{[@metadata][version]}_alias"        
+        ilm_rollover_alias => "%%{[@metadata][beat]}-%%{[@metadata][version]}"        
         ilm_policy => "7-days"
       }
     }
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "configmap_filebeatconfig" {
@@ -231,6 +248,9 @@ data:
       loadbalance: false
       index: filebeat
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "elk_secret" {
@@ -247,6 +267,9 @@ data:
   ELASTIC_PASSWORD: "MDFzeXN0ZW1z"
   KIBANA_PASSWORD: "MDFzeXN0ZW1z"
 YAML
+  depends_on = [
+    kubectl_manifest.namespace
+  ]
 }
 
 resource "kubectl_manifest" "elasticsearch" {
